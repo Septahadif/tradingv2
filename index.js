@@ -7,50 +7,42 @@ const TELEGRAM_CHAT_ID = globalThis.TELEGRAM_CHAT_ID;
 const analysisCache = new Map();
 const CACHE_TTL = 30000; // 30 seconds
 
-// Timeframe-specific Configuration
-const TIMEFRAME_CONFIG = {
-  M5: {
-    ema: { fast: 5, slow: 13 },
-    rsi: { overbought: 65, oversold: 35 },
-    volume: { spike: 2.0, minConfirm: 1.2 },
-    riskReward: 2.0,
-    candle: { minSize: 0.3, pinBarWick: 0.6 }
-  },
-  H1: {
-    ema: { fast: 9, slow: 21 },
-    rsi: { overbought: 70, oversold: 30 },
-    volume: { spike: 1.8, minConfirm: 1.0 },
-    riskReward: 1.5,
-    candle: { minSize: 0.4, pinBarWick: 0.6 }
-  },
-  D1: {
-    ema: { fast: 21, slow: 50 },
-    rsi: { overbought: 75, oversold: 25 },
-    volume: { spike: 1.5, minConfirm: 0.8 },
-    riskReward: 1.3,
-    candle: { minSize: 0.5, pinBarWick: 0.6 }
-  }
-};
-
-// Enhanced Data Validation (Unchanged)
+// Enhanced Data Validation
 function validateTradingData(ohlc, prevCandles, indicators, volume, avgVolume, keyLevels) {
-  // ... (existing validation code remains exactly the same)
+  // Validate OHLC structure
+  if (!ohlc || typeof ohlc !== 'object') throw new Error("Invalid OHLC data");
+  if (ohlc.high < ohlc.low) throw new Error("High price cannot be lower than low price");
+  if (ohlc.open < 0 || ohlc.close < 0) throw new Error("Prices cannot be negative");
+
+  // Validate indicators
+  if (typeof indicators.rsi !== 'number' || indicators.rsi < 0 || indicators.rsi > 100) {
+    throw new Error("Invalid RSI value");
+  }
+  if (typeof indicators.macd !== 'number' || typeof indicators.macd_signal !== 'number') {
+    throw new Error("Invalid MACD values");
+  }
+
+  // Validate volume
+  if (typeof volume !== 'number' || volume < 0) throw new Error("Invalid volume");
+  if (typeof avgVolume !== 'number' || avgVolume <= 0) throw new Error("Invalid average volume");
+
+  // Validate key levels
+  if (!keyLevels || typeof keyLevels !== 'object') throw new Error("Invalid key levels data");
+  if (typeof keyLevels.s1 !== 'number' || typeof keyLevels.r1 !== 'number') {
+    throw new Error("Support/Resistance levels must be numbers");
+  }
 }
 
-// Enhanced Price Action Detection with Timeframe Awareness
-function detectPriceAction(ohlc, prevCandle, keyLevels, timeframe = 'M5') {
-  const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
+// Price Action Detection
+function detectPriceAction(ohlc, prevCandle, keyLevels) {
   const bodySize = Math.abs(ohlc.close - ohlc.open);
   const upperWick = ohlc.high - Math.max(ohlc.open, ohlc.close);
   const lowerWick = Math.min(ohlc.open, ohlc.close) - ohlc.low;
   const totalRange = ohlc.high - ohlc.low;
-  const avgCandleSize = calculateAverageCandleSize(prevCandles);
 
-  // Pin Bar Detection with timeframe-specific thresholds
-  const isBullishPin = (lowerWick / totalRange > config.candle.pinBarWick) && 
-                      (bodySize / totalRange < 0.3);
-  const isBearishPin = (upperWick / totalRange > config.candle.pinBarWick) && 
-                       (bodySize / totalRange < 0.3);
+  // Pin Bar Detection
+  const isBullishPin = (lowerWick / totalRange > 0.6) && (bodySize / totalRange < 0.3);
+  const isBearishPin = (upperWick / totalRange > 0.6) && (bodySize / totalRange < 0.3);
 
   // Rejection at Key Levels
   const rejectionAtResistance = ohlc.high > keyLevels.r1 && ohlc.close < keyLevels.r1;
@@ -61,23 +53,25 @@ function detectPriceAction(ohlc, prevCandle, keyLevels, timeframe = 'M5') {
     isBearishPin,
     rejectionAtResistance,
     rejectionAtSupport,
-    strongBullish: ohlc.close > ohlc.open && 
-                  (ohlc.close - ohlc.open) > (avgCandleSize * config.candle.minSize),
-    strongBearish: ohlc.close < ohlc.open && 
-                  (ohlc.open - ohlc.close) > (avgCandleSize * config.candle.minSize),
-    isNoise: totalRange < (avgCandleSize * 0.3) // Only for M5
+    strongBullish: ohlc.close > ohlc.open && (ohlc.close - ohlc.open) > (prevCandle.high - prevCandle.low) * 0.5,
+    strongBearish: ohlc.close < ohlc.open && (ohlc.open - ohlc.close) > (prevCandle.high - prevCandle.low) * 0.5
   };
 }
 
-// Risk/Reward Calculation (Unchanged)
+// Risk/Reward Calculation
 function calculateRiskReward(ohlc, keyLevels) {
   if (!ohlc || !keyLevels) return 0;
+  
   const potentialReward = keyLevels.r1 - ohlc.close;
   const potentialRisk = ohlc.close - keyLevels.s1;
-  return potentialRisk > 0 ? potentialReward / potentialRisk : 0;
+  
+  // Prevent division by zero
+  if (potentialRisk <= 0) return 0;
+  
+  return potentialReward / potentialRisk;
 }
 
-// AI Response Parsing (Enhanced with timeframe context)
+// AI Response Parsing
 function parseAIResponse(aiText) {
   try {
     const cleaned = aiText.replace(/```json|```/g, "").trim();
@@ -93,8 +87,7 @@ function parseAIResponse(aiText) {
       explanation: parsed.explanation || "No explanation provided",
       entry: parsed.entry || null,
       stopLoss: parsed.stopLoss || null,
-      takeProfit: parsed.takeProfit || null,
-      timeframeContext: parsed.timeframeContext || ""
+      takeProfit: parsed.takeProfit || null
     };
   } catch (e) {
     console.error("Failed to parse AI response:", e);
@@ -104,59 +97,44 @@ function parseAIResponse(aiText) {
       explanation: "Error parsing AI response",
       entry: null,
       stopLoss: null,
-      takeProfit: null,
-      timeframeContext: ""
+      takeProfit: null
     };
   }
 }
 
-// Enhanced AI Analysis with Timeframe-Specific Rules
+// Enhanced AI Analysis Function
 async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolume, keyLevels, higherTF, marketContext, freev36Key) {
   validateTradingData(ohlc, prevCandles, indicators, volume, avgVolume, keyLevels);
   
-  const config = TIMEFRAME_CONFIG[tf] || TIMEFRAME_CONFIG.M5;
-  const priceAction = detectPriceAction(ohlc, prevCandles[0], keyLevels, tf);
+  const priceAction = detectPriceAction(ohlc, prevCandles[0], keyLevels);
   const riskRewardRatio = calculateRiskReward(ohlc, keyLevels);
 
-  const timeframeRules = {
-    M5: `M5-SPECIFIC RULES:
-1. Require volume > ${config.volume.spike}x average (Current: ${(volume/avgVolume).toFixed(1)}x)
-2. Minimum risk/reward ${config.riskReward}:1 (Current: ${riskRewardRatio.toFixed(1)}:1)
-3. Strong preference for pin bars at key levels
-4. Avoid trading during news events
-5. Strictly follow H1 trend direction`,
-
-    H1: `H1-SPECIFIC RULES:
-1. Must align with D1 trend (Current: ${higherTF.d1Trend})
-2. Minimum risk/reward ${config.riskReward}:1
-3. Require closing price confirmation
-4. Volume > ${config.volume.spike}x average preferred`,
-
-    D1: `D1-SPECIFIC RULES:
-1. Consider weekly trend context
-2. Minimum risk/reward ${config.riskReward}:1
-3. Require volume confirmation
-4. Prefer signals at major support/resistance`
-  };
-
   const userContent = `Act as a professional trading analyst. Strictly follow these rules:
-${timeframeRules[tf]}
+  1. Trend Alignment: Never contradict higher timeframe trend (H1/D1).
+  2. Price Action: ${priceAction.isBullishPin ? "Bullish Pin Bar detected" : priceAction.isBearishPin ? "Bearish Pin Bar detected" : "No strong pattern"}.
+  3. Key Levels: ${priceAction.rejectionAtResistance ? "Rejection at Resistance" : priceAction.rejectionAtSupport ? "Rejection at Support" : "No rejection"}.
+  4. Volume Confirmation: Current ${(volume/avgVolume).toFixed(1)}x average volume.
+  5. Risk/Reward: ${riskRewardRatio.toFixed(1)}:1 (Minimum 1.5:1 required).
 
-TREND ANALYSIS:
-- EMA${config.ema.fast} ${indicators.emaFast > indicators.emaSlow ? ">" : "<"} EMA${config.ema.slow}
-- RSI: ${indicators.rsi} (${indicators.rsi > config.rsi.overbought ? "Overbought" : indicators.rsi < config.rsi.oversold ? "Oversold" : "Neutral"})
-- Price Action: ${priceAction.isBullishPin ? "Bullish Pin Bar" : priceAction.isBearishPin ? "Bearish Pin Bar" : "No strong pattern"}
-- Key Levels: S1=${keyLevels.s1}, R1=${keyLevels.r1}
+  Current Analysis:
+  - Symbol: ${symbol} (${tf})
+  - Price: O=${ohlc.open} H=${ohlc.high} L=${ohlc.low} C=${ohlc.close}
+  - Trend: EMA9 ${indicators.ema9 > indicators.ema21 ? ">" : "<"} EMA21
+  - RSI: ${indicators.rsi} (${indicators.rsi > 70 ? "Overbought" : indicators.rsi < 30 ? "Oversold" : "Neutral"})
+  - MACD: ${indicators.macd > indicators.macd_signal ? "Bullish" : "Bearish"} crossover
+  - Volume: ${volume > avgVolume * 1.5 ? "HIGH" : "Normal"} (${volume} vs avg ${avgVolume})
+  - Key Levels: S1=${keyLevels.s1}, R1=${keyLevels.r1}
+  - Higher TF: H1=${higherTF.h1Trend}, D1=${higherTF.d1Trend}
+  - Market: ${marketContext.session} session, ${marketContext.volatility} volatility
 
-Provide JSON response: {
-  "signal": "buy/sell/hold",
-  "confidence": "high/medium/low",
-  "explanation": "...",
-  "entry": number,
-  "stopLoss": number,
-  "takeProfit": number,
-  "timeframeContext": "Higher TF confirmation status"
-}`;
+  Provide JSON response: { 
+    "signal": "buy/sell/hold", 
+    "confidence": "high/medium/low", 
+    "explanation": "...",
+    "entry": number,
+    "stopLoss": number,
+    "takeProfit": number
+  }`;
 
   const payload = {
     model: MODEL,
@@ -181,6 +159,7 @@ Provide JSON response: {
     });
 
     clearTimeout(timeout);
+    
     if (!resp.ok) throw new Error(`AI API Error: ${resp.status} ${await resp.text()}`);
     
     const data = await resp.json();
@@ -192,31 +171,23 @@ Provide JSON response: {
   }
 }
 
-// Enhanced Signal Filtering with Timeframe Logic
-function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, priceAction, riskRewardRatio, timeframe = 'M5') {
-  const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-
-  // Trend Alignment
-  if (timeframe === 'M5' && parsedSignal.signal === "buy" && higherTF.h1Trend === "bearish") {
+// Enhanced Signal Filtering
+function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, priceAction, riskRewardRatio) {
+  // Reject against strong trend
+  if (parsedSignal.signal === "buy" && higherTF.d1Trend === "strong bearish") {
     return {
       ...parsedSignal,
       signal: "hold",
       confidence: "low",
-      explanation: `${parsedSignal.explanation} (Rejected: Against H1 trend)`
+      explanation: `${parsedSignal.explanation} (Rejected: Against D1 strong trend)`
     };
   }
 
-  if (timeframe === 'H1' && parsedSignal.signal === "buy" && higherTF.d1Trend === "bearish") {
-    return {
-      ...parsedSignal,
-      confidence: "medium",
-      explanation: `${parsedSignal.explanation} (Caution: D1 trend bearish)`
-    };
-  }
-
-  // RSI Filtering
-  if ((parsedSignal.signal === "buy" && indicators.rsi > config.rsi.overbought && volume < avgVolume * config.volume.minConfirm) ||
-      (parsedSignal.signal === "sell" && indicators.rsi < config.rsi.oversold && volume < avgVolume * config.volume.minConfirm)) {
+  // Filter extreme RSI without volume
+  if (
+    (parsedSignal.signal === "buy" && indicators.rsi > 70 && volume < avgVolume * 1.2) ||
+    (parsedSignal.signal === "sell" && indicators.rsi < 30 && volume < avgVolume * 1.2)
+  ) {
     return {
       ...parsedSignal,
       signal: "hold",
@@ -225,41 +196,31 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
     };
   }
 
-  // Risk/Reward Filter
-  if (riskRewardRatio < config.riskReward) {
+  // Filter low risk/reward
+  if (riskRewardRatio < 1.5) {
     return {
       ...parsedSignal,
       signal: "hold",
       confidence: "low",
-      explanation: `${parsedSignal.explanation} (Rejected: RR ${riskRewardRatio.toFixed(1)}:1 < ${config.riskReward}:1)`
+      explanation: `${parsedSignal.explanation} (Rejected: Risk/Reward ${riskRewardRatio.toFixed(1)}:1 too low)`
     };
   }
 
-  // Price Action Boost
+  // Boost confidence for price action confirmations
   if ((parsedSignal.signal === "buy" && priceAction.isBullishPin) || 
       (parsedSignal.signal === "sell" && priceAction.isBearishPin)) {
     return {
       ...parsedSignal,
       confidence: "high",
-      explanation: `${parsedSignal.explanation} (Confirmed by ${timeframe} Price Action)`
-    };
-  }
-
-  // Noise Filter for M5
-  if (timeframe === 'M5' && priceAction.isNoise) {
-    return {
-      ...parsedSignal,
-      signal: "hold",
-      confidence: "low",
-      explanation: "Market noise detected (small candle)"
+      explanation: `${parsedSignal.explanation} (Confirmed by Price Action)`
     };
   }
 
   return parsedSignal;
 }
 
-// Enhanced Telegram Alert with Timeframe Context
-async function sendTelegramAlert(symbol, timeframe, signal, confidence, explanation, entry, sl, tp, timeframeContext) {
+// Enhanced Telegram Alert with Trade Details
+async function sendTelegramAlert(symbol, timeframe, signal, confidence, explanation, entry, sl, tp) {
   const emoji = { buy: "🟢", sell: "🔴", hold: "🟡" }[signal];
   const tradeDetails = signal === "hold" ? "" : `
 🎯 Entry: ${entry || "N/A"}
@@ -271,7 +232,6 @@ ${emoji} *${signal.toUpperCase()} Signal* (${confidence} confidence)
 📊 *${symbol}* | ${timeframe}
 ${tradeDetails}
 📌 *Reason*: ${explanation}
-🔹 *Context*: ${timeframeContext}
 🔹 *Time*: ${new Date().toUTCString()}`;
 
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
@@ -285,13 +245,16 @@ ${tradeDetails}
         parse_mode: "Markdown"
       })
     });
-    if (!response.ok) console.error("Telegram error:", await response.text());
+    
+    if (!response.ok) {
+      console.error("Telegram error:", await response.text());
+    }
   } catch (error) {
     console.error("Failed to send Telegram alert:", error);
   }
 }
 
-// Main Handler with Timeframe Support
+// Main Handler
 async function handleRequest(request) {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
@@ -305,12 +268,14 @@ async function handleRequest(request) {
 
   try {
     const requestData = await request.json();
+    
+    // Validate request structure
     if (!requestData.symbol || !requestData.timeframe) {
       throw new Error("Missing required fields");
     }
 
-    const timeframe = requestData.timeframe;
-    const cacheKey = `${requestData.symbol}-${timeframe}-${JSON.stringify(requestData.ohlc)}`;
+    // Create cache key
+    const cacheKey = `${requestData.symbol}-${requestData.timeframe}-${JSON.stringify(requestData.ohlc)}`;
     if (analysisCache.has(cacheKey)) {
       const cached = analysisCache.get(cacheKey);
       if (Date.now() - cached.timestamp < CACHE_TTL) {
@@ -320,21 +285,13 @@ async function handleRequest(request) {
       }
     }
 
-    // Apply timeframe-specific settings
-    const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-    const indicators = {
-      ...requestData.indicators,
-      emaFast: requestData.indicators[`ema${config.ema.fast}`],
-      emaSlow: requestData.indicators[`ema${config.ema.slow}`]
-    };
-
     // Process analysis
     const aiResponse = await callAI(
       requestData.symbol,
-      timeframe,
+      requestData.timeframe,
       requestData.ohlc,
       requestData.prevCandles,
-      indicators,
+      requestData.indicators,
       requestData.volume,
       requestData.avgVolume,
       requestData.keyLevels,
@@ -344,22 +301,18 @@ async function handleRequest(request) {
     );
 
     let parsedSignal = parseAIResponse(aiResponse);
-    const priceAction = detectPriceAction(requestData.ohlc, requestData.prevCandles[0], requestData.keyLevels, timeframe);
+    const priceAction = detectPriceAction(requestData.ohlc, requestData.prevCandles[0], requestData.keyLevels);
     const riskReward = calculateRiskReward(requestData.ohlc, requestData.keyLevels);
 
     parsedSignal = filterSignal(
       parsedSignal,
-      indicators,
+      requestData.indicators,
       requestData.volume,
       requestData.avgVolume,
       requestData.higherTF,
       priceAction,
-      riskReward,
-      timeframe
+      riskReward
     );
-
-    // Add timeframe context
-    parsedSignal.timeframeContext = `H1: ${requestData.higherTF.h1Trend}, D1: ${requestData.higherTF.d1Trend}`;
 
     // Cache and send response
     analysisCache.set(cacheKey, {
@@ -369,19 +322,18 @@ async function handleRequest(request) {
 
     await sendTelegramAlert(
       requestData.symbol,
-      timeframe,
+      requestData.timeframe,
       parsedSignal.signal,
       parsedSignal.confidence,
       parsedSignal.explanation,
       parsedSignal.entry,
       parsedSignal.stopLoss,
-      parsedSignal.takeProfit,
-      parsedSignal.timeframeContext
+      parsedSignal.takeProfit
     );
 
     return new Response(JSON.stringify(parsedSignal), {
       headers: { "Content-Type": "application/json" }
-    });
+    };
 
   } catch (error) {
     console.error("Processing error:", error);
@@ -390,11 +342,6 @@ async function handleRequest(request) {
       details: error.message 
     }), { status: 500 });
   }
-}
-
-// Helper Functions
-function calculateAverageCandleSize(candles) {
-  return candles.reduce((sum, candle) => sum + (candle.high - candle.low), 0) / candles.length;
 }
 
 addEventListener("fetch", (event) => {
