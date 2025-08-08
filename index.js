@@ -381,7 +381,7 @@ async function handleRequest(request) {
 
     return new Response(JSON.stringify(parsedSignal), {
       headers: { "Content-Type": "application/json" }
-    };
+    });
 
   } catch (error) {
     console.error("Processing error:", error);
