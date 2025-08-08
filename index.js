@@ -547,19 +547,28 @@ ${tradeDetails}
 🔹 Time: ${new Date().toUTCString()}
 [View Chart](${chartUrl})`;
       
-    const escapedText = message.replace(/[*_`]/g, '\\$&');
+    
 
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: "Markdown",
-        disable_web_page_preview: false
-      }),
-      timeout: 5000
-    });
+    const escapedText = message
+  .replace(/\[/g, '\\[')
+  .replace(/\]/g, '\\]')
+  .replace(/\(/g, '\\(')
+  .replace(/\)/g, '\\)')
+  .replace(/\*/g, '\\*')
+  .replace(/_/g, '\\_')
+  .replace(/`/g, '\\`');
+
+const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chat_id: TELEGRAM_CHAT_ID,
+    text: escapedText, // ✅ Safe
+    parse_mode: "MarkdownV2",
+    disable_web_page_preview: false
+  }),
+  timeout: 5000
+});
 
     if (!response.ok) {
       const error = await response.text();
@@ -752,14 +761,18 @@ async function handleRequest(request) {
 }
 
 // Cache Cleanup Interval
-setInterval(() => {
+addEventListener('scheduled', event => {
+  event.waitUntil(handleCacheCleanup());
+});
+
+async function handleCacheCleanup() {
   const now = Date.now();
   analysisCache.forEach((entry, key) => {
     if (now - entry.timestamp > CACHE_TTL * 2) {
       analysisCache.delete(key);
     }
   });
-}, 60000);
+}
 
 // Worker Event Listener
 addEventListener("fetch", (event) => {
