@@ -156,7 +156,7 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
       },
       body: JSON.stringify(payload),
       signal: controller.signal
-    });
+    })
 
     clearTimeout(timeout);
     
