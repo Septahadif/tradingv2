@@ -234,7 +234,7 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
     const lowerWick = Math.min(ohlc.open, ohlc.close) - ohlc.low;
     const totalRange = ohlc.high - ohlc.low;
     const avgCandleSize = calculateAverageCandleSize(prevCandles);
-    
+
     // Handle zero range candles
     if (totalRange === 0) {
       return {
@@ -245,29 +245,69 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
         strongBullish: false,
         strongBearish: false,
         isNoise: true,
-        isDoji: true
+        isDoji: true,
+        breakoutBelowSupport: false,
+        breakoutAboveResistance: false,
+        strongBreakout: false
       };
     }
 
     const bodyRatio = bodySize / totalRange;
-    const isPinBar = (wick, body) => wick / totalRange > config.candle.pinBarWick && 
-                                      body / totalRange < config.candle.minBodyRatio;
+    const isPinBar = (wick, body) =>
+      wick / totalRange > config.candle.pinBarWick &&
+      body / totalRange < config.candle.minBodyRatio;
 
+    // ===== Breakout Filters =====
+    const atr = Math.max(calculateATR(prevCandles) || totalRange, 0.5);
+    const minBreakout = 0.05 * atr;
+    const maxBreakout = atr * config.atrMultiplier;
+
+    const prev = prevCandles[prevCandles.length - 1];
+    const wasInsideRange = prev?.high <= keyLevels.r1 && prev?.low >= keyLevels.s1;
+
+    const breakoutBelowSupport =
+      ohlc.close < keyLevels.s1 - minBreakout &&
+      ohlc.open >= keyLevels.s1 &&
+      (keyLevels.s1 - ohlc.close) <= maxBreakout &&
+      wasInsideRange;
+
+    const breakoutAboveResistance =
+      ohlc.close > keyLevels.r1 + minBreakout &&
+      ohlc.open <= keyLevels.r1 &&
+      (ohlc.close - keyLevels.r1) <= maxBreakout &&
+      wasInsideRange;
+
+    const strongBreakout =
+      (
+        ohlc.close < keyLevels.s1 &&
+        (ohlc.high - keyLevels.s1) < (keyLevels.s1 - ohlc.low) &&
+        (keyLevels.s1 - ohlc.close) <= maxBreakout &&
+        wasInsideRange
+      ) ||
+      (
+        ohlc.close > keyLevels.r1 &&
+        (keyLevels.r1 - ohlc.low) < (ohlc.high - keyLevels.r1) &&
+        (ohlc.close - keyLevels.r1) <= maxBreakout &&
+        wasInsideRange
+      );
+
+    // ===== Return All Signals =====
     return {
       isBullishPin: isPinBar(lowerWick, bodySize),
       isBearishPin: isPinBar(upperWick, bodySize),
       rejectionAtResistance: ohlc.high > keyLevels.r1 && ohlc.close < keyLevels.r1,
       rejectionAtSupport: ohlc.low < keyLevels.s1 && ohlc.close > keyLevels.s1,
-      strongBullish: ohlc.close > ohlc.open && 
-                    (ohlc.close - ohlc.open) > (avgCandleSize * config.candle.minSize),
-      strongBearish: ohlc.close < ohlc.open && 
-                    (ohlc.open - ohlc.close) > (avgCandleSize * config.candle.minSize),
+      strongBullish:
+        ohlc.close > ohlc.open &&
+        (ohlc.close - ohlc.open) > (avgCandleSize * config.candle.minSize),
+      strongBearish:
+        ohlc.close < ohlc.open &&
+        (ohlc.open - ohlc.close) > (avgCandleSize * config.candle.minSize),
       isNoise: totalRange < (avgCandleSize * config.candle.maxNoiseRatio),
       isDoji: bodyRatio < 0.1,
-      breakoutBelowSupport: ohlc.close < keyLevels.s1 && ohlc.open >= keyLevels.s1,
-      breakoutAboveResistance: ohlc.close > keyLevels.r1 && ohlc.open <= keyLevels.r1,
-      strongBreakout: (ohlc.close < keyLevels.s1 && (ohlc.high - keyLevels.s1) < (keyLevels.s1 - ohlc.low)) || 
-                   (ohlc.close > keyLevels.r1 && (keyLevels.r1 - ohlc.low) < (ohlc.high - keyLevels.r1))
+      breakoutBelowSupport,
+      breakoutAboveResistance,
+      strongBreakout
     };
   } catch (error) {
     debugLog("Price action detection error:", error);
@@ -280,6 +320,9 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
       strongBearish: false,
       isNoise: true,
       isDoji: false,
+      breakoutBelowSupport: false,
+      breakoutAboveResistance: false,
+      strongBreakout: false,
       error: error.message
     };
   }
