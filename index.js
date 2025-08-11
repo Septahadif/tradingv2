@@ -288,30 +288,34 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 // Enhanced Risk/Reward Calculation
 function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
   try {
-    const cfg   = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-    const atr   = Math.max(calculateATR(prevCandles), ohlc.high - ohlc.low, 0.5);
+    const cfg = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
+    // ensure positive ATR
+    const atr = Math.max(calculateATR(prevCandles) || (ohlc.high - ohlc.low), 0.5);
 
     const entry = ohlc.close;
+    const mid = (keyLevels.s1 + keyLevels.r1) / 2;
 
-    // --- long setup (buy dip) ---
-    const slLong   = keyLevels.s1 - atr * 0.5;
-    const tpLong   = keyLevels.r1 + atr * cfg.atrMultiplier;
-    const riskLong = entry - slLong;
-    const rwLong   = riskLong > 0 ? (tpLong - entry) / riskLong : 0;
+    let sl, tp, risk, reward;
 
-    // --- short setup (sell rally) ---
-    const slShort   = keyLevels.r1 + atr * 0.5;
-    const tpShort   = keyLevels.s1 - atr * cfg.atrMultiplier;
-    const riskShort = slShort - entry;
-    const rwShort   = riskShort > 0 ? (entry - tpShort) / riskShort : 0;
+    if (entry < mid) {                    // closer to support → prefer LONG
+      sl   = keyLevels.s1 - atr * 0.5;
+      tp   = keyLevels.r1 + atr * cfg.atrMultiplier;
+      risk = entry - sl;
+      reward = tp - entry;
+    } else {                              // closer to resistance → prefer SHORT
+      sl   = keyLevels.r1 + atr * 0.5;
+      tp   = keyLevels.s1 - atr * cfg.atrMultiplier;
+      risk = sl - entry;
+      reward = entry - tp;
+    }
 
-    // ambil setup yang RR-nya valid
-    return Math.max(rwLong, rwShort);
+    return risk > 0 ? reward / risk : 0;
   } catch (e) {
     debugLog("RR error:", e);
     return 0;
   }
 }
+
 
 
 
