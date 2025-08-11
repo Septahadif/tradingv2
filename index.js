@@ -288,30 +288,39 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 // Enhanced Risk/Reward Calculation
 function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
   try {
+    // Validasi tambahan
+    if (!ohlc || !keyLevels || !prevCandles) return 0;
+    if (keyLevels.s1 >= keyLevels.r1) return 0;
+    
     const cfg = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-    // ensure positive ATR
-    const atr = Math.max(calculateATR(prevCandles) || (ohlc.high - ohlc.low), 0.5);
-
+    const atr = Math.max(calculateATR(prevCandles) || (ohlc.high - ohlc.low), 0.0001); // minimal 0.0001
+    
     const entry = ohlc.close;
     const mid = (keyLevels.s1 + keyLevels.r1) / 2;
 
-    let sl, tp, risk, reward;
-
-    if (entry < mid) {                    // closer to support → prefer LONG
-      sl   = keyLevels.s1 - atr * 0.5;
-      tp   = keyLevels.r1 + atr * cfg.atrMultiplier;
-      risk = entry - sl;
-      reward = tp - entry;
-    } else {                              // closer to resistance → prefer SHORT
-      sl   = keyLevels.r1 + atr * 0.5;
-      tp   = keyLevels.s1 - atr * cfg.atrMultiplier;
-      risk = sl - entry;
-      reward = entry - tp;
+    // Pastikan harga berada dalam range key levels
+    if (entry <= keyLevels.s1 || entry >= keyLevels.r1) {
+      return cfg.riskReward * 1.5; // Beri bonus RR untuk breakout
     }
 
-    return risk > 0 ? reward / risk : 0;
+    let sl, tp, risk, reward;
+
+    if (entry < mid) {
+      sl = Math.min(keyLevels.s1 - (atr * 0.5), ohlc.low - (atr * 0.3));
+      tp = keyLevels.r1 + (atr * cfg.atrMultiplier);
+      risk = Math.max(entry - sl, 0.0001); // pastikan tidak 0
+      reward = Math.max(tp - entry, 0.0001);
+    } else {
+      sl = Math.max(keyLevels.r1 + (atr * 0.5), ohlc.high + (atr * 0.3));
+      tp = keyLevels.s1 - (atr * cfg.atrMultiplier);
+      risk = Math.max(sl - entry, 0.0001);
+      reward = Math.max(entry - tp, 0.0001);
+    }
+
+    const rr = reward / risk;
+    return rr > 50 ? 50 : rr; // Batasi RR maksimal 50:1
   } catch (e) {
-    debugLog("RR error:", e);
+    debugLog("RR calculation error:", e);
     return 0;
   }
 }
