@@ -330,21 +330,18 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 
 // Enhanced Risk/Reward Calculation
 function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
-  try {
-    // Validasi tambahan
-    if (!ohlc || !keyLevels || !prevCandles) return 0;
-    if (keyLevels.s1 >= keyLevels.r1) return 0;
-    
-    const cfg = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-    const atr = Math.max(calculateATR(prevCandles) || (ohlc.high - ohlc.low), 0.0001); // minimal 0.0001
-    
-    const entry = ohlc.close;
-    const mid = (keyLevels.s1 + keyLevels.r1) / 2;
+  if (!ohlc || !keyLevels || !prevCandles) return 0;
+  
+  const cfg = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
+  const atr = Math.max(calculateATR(prevCandles) || (ohlc.high - ohlc.low), 0.0001);
+  const entry = ohlc.close;
 
-    // Pastikan harga berada dalam range key levels
-    if (entry <= keyLevels.s1 || entry >= keyLevels.r1) {
-      return cfg.riskReward * 1.5; // Beri bonus RR untuk breakout
-    }
+  // Jika harga di luar range S1-R1, hitung RR berdasarkan ATR
+  if (entry <= keyLevels.s1 || entry >= keyLevels.r1) {
+    const risk = atr * cfg.atrMultiplier;
+    const reward = risk * cfg.riskReward;
+    return reward / risk; // Ini akan selalu mengembalikan cfg.riskReward
+  }
 
     let sl, tp, risk, reward;
 
@@ -847,7 +844,12 @@ async function handleRequest(request) {
       requestData.keyLevels,
       timeframe
     );
-    const riskReward = calculateRiskReward(requestData.ohlc, requestData.keyLevels);
+    const riskReward = calculateRiskReward(
+  requestData.ohlc, 
+  requestData.keyLevels,
+  timeframe,
+  requestData.prevCandles
+);
     const dynamicStop = calculateDynamicStop(
       requestData.ohlc,
       requestData.prevCandles,
