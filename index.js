@@ -428,7 +428,7 @@ const payload = {
     content: `${timeframeRules[tf]}\n\n${technicalContext}\n\nBerikan respon JSON dengan:\n- signal (buy/sell/hold)\n- confidence (high/medium/low)\n- explanation\n- entry\n- stopLoss\n- takeProfit\n- timeframeContext` 
   }],
   temperature: 0.1,
-  max_tokens: 100,
+  max_tokens: 400,
   response_format: { type: "json_object" }
 };
 
