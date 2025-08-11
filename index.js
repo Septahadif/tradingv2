@@ -388,29 +388,29 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
     const session = getActiveSession();
 
     const newsWarning = isHighImpactNews(marketContext, symbol) 
-      ? "⚠️ HIGH IMPACT NEWS ACTIVE" 
-      : "No high impact news";
+      ? "⚠️ ADA BERITA BESAR" 
+      : "tidak ada berita";
     
     const timeframeRules = {
-      M5: `M5 TRADING RULES (STRICT):
-1. Must confirm with H1 trend (Current: ${higherTF.h1Trend})
-2. Volume > ${config.volume.spike}x avg (Current: ${(volume/avgVolume).toFixed(1)}x)
+  M5: `ATURAN TRADING M5:
+1. sesuaikan dengan trend H1 (Trend saat ini: ${higherTF.h1Trend})
+2. Volume > ${config.volume.spike}x rata-rata (Saat ini: ${(volume/avgVolume).toFixed(1)}x)
 3. ${newsWarning}
-4. Session: ${session}
-6. Strong rejection or pin bar preferred`,
+4. Sesi: ${session}
+5. Lebih diutamakan rejection kuat atau pin bar`,
 
-      H1: `H1 TRADING RULES:
-1. Align with D1 trend (Current: ${higherTF.d1Trend})
-2. Close confirmation required
-3. Volume > ${config.volume.spike}x avg preferred
+  H1: `ATURAN TRADING H1:
+1. Sesuai dengan trend D1 (Trend saat ini: ${higherTF.d1Trend})
+2. Diperlukan konfirmasi close
+3. Volume > ${config.volume.spike}x rata-rata lebih diutamakan
 4. ${newsWarning}`,
 
-      D1: `D1 TRADING RULES:
-1. Consider weekly trend
-2. Volume confirmation required
-3. Major S/R levels preferred
+  D1: `ATURAN TRADING D1:
+1. Pertimbangkan trend weekly
+2. Diperlukan konfirmasi volume
+3. Lebih diutamakan level S/R utama
 4. ${newsWarning}`
-    };
+};
 
     const technicalContext = `TECHNICAL CONTEXT:
 - Price: ${ohlc.close} (Open: ${ohlc.open}, High: ${ohlc.high}, Low: ${ohlc.low})
@@ -421,11 +421,17 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
 - Dynamic Stops: Buy=${dynamicStop.buy?.toFixed(5)}, Sell=${dynamicStop.sell?.toFixed(5)}`;
 
     const payload = {
-      model: MODEL,
-      messages: [{ 
-        role: "user", 
-        content: `${timeframeRules[tf]}\n\n${technicalContext}\n\nProvide JSON response with:\n- signal (buy/sell/hold)\n- confidence (high/medium/low)\n- explanation\n- entry\n- stopLoss\n- takeProfit\n- timeframeContext` 
-      }],
+    model: MODEL,
+    messages: [{ 
+      role: "user", 
+      content: `${timeframeRules[tf]}\n\n${technicalContext}\n\nBerikan respon JSON singkat dalam Bahasa Indonesia dengan format:
+- signal (buy/sell/hold)
+- confidence (high/medium/low)
+- alasan (maksimal 15 kata)
+- entry (opsional)
+- stopLoss (opsional)
+- takeProfit (opsional)` 
+    }],
       temperature: 0.1,
       max_tokens: 300,
       response_format: { type: "json_object" }
@@ -469,7 +475,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
     return {
       signal: "sell",
       confidence: "high",
-      explanation: `Strong breakout below support (S1: ${keyLevels.s1})`,
+      explanation: `kuat menembus support (S1: ${keyLevels.s1})`,
       entry: ohlc.close,
       stopLoss: ohlc.high,
       takeProfit: keyLevels.s1 - (keyLevels.s1 - ohlc.close) * 1.5
@@ -480,7 +486,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
     return {
       signal: "buy",
       confidence: "high",
-      explanation: `Strong breakout above resistance (R1: ${keyLevels.r1})`,
+      explanation: `kuat menembus resistance (R1: ${keyLevels.r1})`,
       entry: ohlc.close,
       stopLoss: ohlc.low,
       takeProfit: keyLevels.r1 + (ohlc.close - keyLevels.r1) * 1.5
@@ -493,7 +499,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
       ...result,
       signal: "hold",
       confidence: "low",
-      explanation: `${result.explanation} (Rejected: High impact news)`
+      explanation: `${result.explanation} (ada berita besar)`
     };
   }
 
@@ -504,7 +510,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
       ...result,
       signal: "hold",
       confidence: "low",
-      explanation: `${result.explanation} (Rejected: Outside trading hours)`
+      explanation: `${result.explanation} (belum jam trading)`
     };
   }
 
@@ -523,7 +529,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
       ...result,
       signal: "hold",
       confidence: "low",
-      explanation: `${result.explanation} (Rejected: Against H1 trend)`
+      explanation: `${result.explanation} (melawan trend H1)`
     };
   }
 
@@ -535,7 +541,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
         ...result,
         signal: "hold",
         confidence: "low",
-        explanation: `${result.explanation} (Rejected: Extreme RSI without volume confirmation)`
+        explanation: `${result.explanation} (rsi extrim bos)`
       };
     }
   }
@@ -548,7 +554,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
     return {
       ...result,
       confidence: "high",
-      explanation: `${result.explanation} (Confirmed by strong price action)`
+      explanation: `${result.explanation} (harga kuat)`
     };
   }
 
@@ -558,7 +564,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
       ...result,
       signal: "hold",
       confidence: "low",
-      explanation: "Market noise detected (small candle range)"
+      explanation: "pasar noise"
     };
   }
   
