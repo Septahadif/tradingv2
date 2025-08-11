@@ -365,7 +365,7 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
     
     const config = TIMEFRAME_CONFIG[tf];
     const priceAction = detectPriceAction(ohlc, prevCandles, keyLevels, tf);
-    const riskRewardRatio = calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles);
+    const riskRewardRatio = calculateRiskReward(ohlc, keyLevels, tf, prevCandles);
     const dynamicStop = calculateDynamicStop(ohlc, prevCandles, tf);
     const session = getActiveSession();
 
