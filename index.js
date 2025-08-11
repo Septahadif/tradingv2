@@ -161,27 +161,26 @@ function calculateATR(candles, period = 14) {
   return trueRanges.slice(-period).reduce((a, b) => a + b, 0) / period;
 }
 
-// Dynamic Stop Calculation with validation
 function calculateDynamicStop(ohlc, prevCandles, timeframe) {
   try {
     const config = TIMEFRAME_CONFIG[timeframe];
-    if (!config) throw new Error(`Invalid timeframe: ${timeframe}`);
-    
-    const atr = calculateATR(prevCandles);
-    if (atr <= 0) throw new Error("Invalid ATR value");
+    const atr = calculateATR(prevCandles) || (ohlc.high - ohlc.low); // Fallback to candle range
     
     return {
       buy: ohlc.low - (atr * config.atrMultiplier),
       sell: ohlc.high + (atr * config.atrMultiplier),
+      takeProfitBuy: ohlc.close + (atr * config.atrMultiplier * 2),
+      takeProfitSell: ohlc.close - (atr * config.atrMultiplier * 2),
       atrValue: atr
     };
   } catch (error) {
-    debugLog("Dynamic stop calculation failed:", error);
+    debugLog("Dynamic stop error:", error);
     return {
-      buy: ohlc.low * 0.995, // Fallback values
+      buy: ohlc.low * 0.995,
       sell: ohlc.high * 1.005,
-      atrValue: 0,
-      error: error.message
+      takeProfitBuy: ohlc.close * 1.01,
+      takeProfitSell: ohlc.close * 0.99,
+      atrValue: 0
     };
   }
 }
@@ -264,7 +263,11 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
       strongBearish: ohlc.close < ohlc.open && 
                     (ohlc.open - ohlc.close) > (avgCandleSize * config.candle.minSize),
       isNoise: totalRange < (avgCandleSize * config.candle.maxNoiseRatio),
-      isDoji: bodyRatio < 0.1
+      isDoji: bodyRatio < 0.1,
+      breakoutBelowSupport: ohlc.close < keyLevels.s1 && ohlc.open >= keyLevels.s1,
+      breakoutAboveResistance: ohlc.close > keyLevels.r1 && ohlc.open <= keyLevels.r1,
+      strongBreakout: (ohlc.close < keyLevels.s1 && (ohlc.high - keyLevels.s1) < (keyLevels.s1 - ohlc.low)) || 
+                   (ohlc.close > keyLevels.r1 && (keyLevels.r1 - ohlc.low) < (ohlc.high - keyLevels.r1))
     };
   } catch (error) {
     debugLog("Price action detection error:", error);
@@ -283,26 +286,28 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 }
 
 // Enhanced Risk/Reward Calculation
-function calculateRiskReward(ohlc, keyLevels) {
+function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
   try {
-    if (!ohlc || !keyLevels) return 0;
-    if (typeof ohlc.close !== 'number') return 0;
-    if (typeof keyLevels.r1 !== 'number' || typeof keyLevels.s1 !== 'number') return 0;
+    const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
+    const atr = calculateATR(prevCandles);
     
-    let potentialReward, potentialRisk;
-if (ohlc.close >= ohlc.R1) {
-    potentialReward = Math.abs(ohlc.close - ohlc.R2 || ohlc.R1);
-    potentialRisk = Math.abs(ohlc.close - ohlc.S1);
-} else if (ohlc.close <= ohlc.S1) {
-    potentialReward = Math.abs(ohlc.R1 - ohlc.close);
-    potentialRisk = Math.abs(ohlc.close - (ohlc.S2 || ohlc.S1));
-} else {
-    potentialReward = Math.abs(ohlc.R1 - ohlc.close);
-    potentialRisk = Math.abs(ohlc.close - ohlc.S1);
-}
-return potentialRisk > 0 ? potentialReward / potentialRisk : 0;
+    const entry = ohlc.close;
+    let stopLoss, takeProfit;
+
+    if (ohlc.close < keyLevels.s1) { // Bearish scenario
+      stopLoss = ohlc.high + (atr * 0.5);
+      takeProfit = keyLevels.s1 - (atr * config.atrMultiplier);
+    } else { // Bullish scenario
+      stopLoss = ohlc.low - (atr * 0.5);
+      takeProfit = keyLevels.r1 + (atr * config.atrMultiplier);
+    }
+
+    const risk = Math.abs(entry - stopLoss);
+    const reward = Math.abs(takeProfit - entry);
+    
+    return risk > 0 ? (reward / risk) : 0;
   } catch (error) {
-    debugLog("Risk reward calculation error:", error);
+    debugLog("RR calculation error:", error);
     return 0;
   }
 }
@@ -360,7 +365,7 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
     
     const config = TIMEFRAME_CONFIG[tf];
     const priceAction = detectPriceAction(ohlc, prevCandles, keyLevels, tf);
-    const riskRewardRatio = calculateRiskReward(ohlc, keyLevels);
+    const riskRewardRatio = calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles);
     const dynamicStop = calculateDynamicStop(ohlc, prevCandles, tf);
     const session = getActiveSession();
 
@@ -440,9 +445,32 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
 }
 
 // Complete Signal Filtering
-function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, priceAction, riskRewardRatio, timeframe, marketContext, symbol) {
+function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, priceAction, riskRewardRatio, timeframe, marketContext, symbol, ohlc, keyLevels) {
   const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
   const result = { ...parsedSignal };
+
+  // 0. Breakout rules (highest priority)
+  if (priceAction.breakoutBelowSupport && volume >= avgVolume * 1.5) {
+    return {
+      signal: "sell",
+      confidence: "high",
+      explanation: `Strong breakout below support (S1: ${keyLevels.s1})`,
+      entry: ohlc.close,
+      stopLoss: ohlc.high,
+      takeProfit: keyLevels.s1 - (keyLevels.s1 - ohlc.close) * 1.5
+    };
+  }
+
+  if (priceAction.breakoutAboveResistance && volume >= avgVolume * 1.5) {
+    return {
+      signal: "buy",
+      confidence: "high",
+      explanation: `Strong breakout above resistance (R1: ${keyLevels.r1})`,
+      entry: ohlc.close,
+      stopLoss: ohlc.low,
+      takeProfit: keyLevels.r1 + (ohlc.close - keyLevels.r1) * 1.5
+    };
+  }
 
   // 1. News Filter
   if (isHighImpactNews(marketContext, symbol)) {
@@ -453,6 +481,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
       explanation: `${result.explanation} (Rejected: High impact news)`
     };
   }
+
 
   // 2. Session Filter
   if (timeframe === 'M5' && getActiveSession() === "Off") {
@@ -525,6 +554,57 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
       explanation: "Market noise detected (small candle range)"
     };
   }
+  
+  // 8. Extreme RSI exception
+if (indicators.rsi < 20 && volume >= avgVolume * config.volume.minConfirm) {
+  return {
+    ...parsedSignal,
+    signal: "buy",
+    confidence: "high",
+    explanation: `Extreme oversold (RSI: ${indicators.rsi}) with volume confirmation`
+  };
+}
+
+if (indicators.rsi > 80 && volume >= avgVolume * config.volume.minConfirm) {
+  return {
+    ...parsedSignal,
+    signal: "sell",
+    confidence: "high",
+    explanation: `Extreme overbought (RSI: ${indicators.rsi}) with volume confirmation`
+  };
+}
+
+  // 9. Revised trend alignment - Extended version
+if (higherTF.d1Trend === "bullish") {
+  if (higherTF.h1Trend === "bearish") {
+    if (parsedSignal.signal === "sell" && indicators.rsi > 40) {
+      // Allow sells during bullish D1 if H1 is bearish and not oversold
+      return {
+        ...parsedSignal,
+        explanation: `${parsedSignal.explanation} (Bullish D1 but H1 bearish, RSI ${indicators.rsi} > 40)`
+      };
+    }
+  }
+  else if (higherTF.h1Trend === "bullish") {
+    if (parsedSignal.signal === "buy" && indicators.rsi < 60) {
+      // Strong confirmation for buys when both D1 and H1 bullish
+      return {
+        ...parsedSignal,
+        confidence: "high",
+        explanation: `${parsedSignal.explanation} (Confirmed by D1+H1 bullish alignment)`
+      };
+    }
+    else if (parsedSignal.signal === "sell") {
+      // Restrict sells during strong bullish alignment
+      return {
+        ...parsedSignal,
+        signal: "hold",
+        confidence: "low",
+        explanation: "Rejected: Strong bullish alignment (D1+H1)"
+      };
+    }
+  }
+}
 
   return result;
 }
@@ -602,24 +682,19 @@ const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/
 }
 
 // Cache Management
-function updateCache(cacheKey, data) {
-  try {
-    analysisCache.set(cacheKey, {
-      data,
-      timestamp: Date.now(),
-      usageCount: (analysisCache.get(cacheKey)?.usageCount || 0) + 1
-    });
-
-    // Periodic cleanup
-    const now = Date.now();
-    analysisCache.forEach((entry, key) => {
-      if (now - entry.timestamp > CACHE_TTL * 2 && entry.usageCount < 2) {
-        analysisCache.delete(key);
-      }
-    });
-  } catch (error) {
-    debugLog("Cache update failed:", error);
+function updateCache(cacheKey, data, marketContext) {
+  // Invalidate cache during news events
+  if (isHighImpactNews(marketContext, data.symbol)) {
+    analysisCache.delete(cacheKey);
+    return;
   }
+
+  // Standard cache update
+  analysisCache.set(cacheKey, {
+    data,
+    timestamp: Date.now(),
+    marketContext: JSON.stringify(marketContext) // Store context
+  });
 }
 
 // Helper Functions
