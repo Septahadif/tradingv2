@@ -412,30 +412,25 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
 4. ${newsWarning}`
 };
 
-    const technicalContext = `TECHNICAL CONTEXT:
-- Price: ${ohlc.close} (Open: ${ohlc.open}, High: ${ohlc.high}, Low: ${ohlc.low})
+    
+    const technicalContext = `KONTEKS TEKNIKAL:
+- Harga: ${ohlc.close} (Open: ${ohlc.open}, High: ${ohlc.high}, Low: ${ohlc.low})
 - EMA${config.ema.fast}: ${indicators.emaFast} ${indicators.emaFast > indicators.emaSlow ? "↑" : "↓"} EMA${config.ema.slow}: ${indicators.emaSlow}
-- RSI: ${indicators.rsi} (${indicators.rsi > config.rsi.overbought ? "Overbought" : indicators.rsi < config.rsi.oversold ? "Oversold" : "Neutral"})
+- RSI: ${indicators.rsi} (${indicators.rsi > config.rsi.overbought ? "Overbought" : indicators.rsi < config.rsi.oversold ? "Oversold" : "Netral"})
 - Price Action: ${priceAction.isBullishPin ? "Bullish Pin" : priceAction.isBearishPin ? "Bearish Pin" : priceAction.isDoji ? "Doji" : "Normal"}
-- Key Levels: S1=${keyLevels.s1}, R1=${keyLevels.r1}
-- Dynamic Stops: Buy=${dynamicStop.buy?.toFixed(5)}, Sell=${dynamicStop.sell?.toFixed(5)}`;
+- Level Kunci: S1=${keyLevels.s1}, R1=${keyLevels.r1}
+- Stop Dinamis: Buy=${dynamicStop.buy?.toFixed(5)}, Sell=${dynamicStop.sell?.toFixed(5)}`;
 
-    const payload = {
-    model: MODEL,
-    messages: [{ 
-      role: "user", 
-      content: `${timeframeRules[tf]}\n\n${technicalContext}\n\nBerikan respon JSON singkat dalam Bahasa Indonesia dengan format:
-- signal (buy/sell/hold)
-- confidence (high/medium/low)
-- alasan (maksimal 15 kata)
-- entry (opsional)
-- stopLoss (opsional)
-- takeProfit (opsional)` 
-    }],
-      temperature: 0.1,
-      max_tokens: 300,
-      response_format: { type: "json_object" }
-    };
+const payload = {
+  model: MODEL,
+  messages: [{ 
+    role: "user", 
+    content: `${timeframeRules[tf]}\n\n${technicalContext}\n\nBerikan respon JSON dengan:\n- signal (buy/sell/hold)\n- confidence (high/medium/low)\n- explanation\n- entry\n- stopLoss\n- takeProfit\n- timeframeContext` 
+  }],
+  temperature: 0.1,
+  max_tokens: 100,
+  response_format: { type: "json_object" }
+};
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
