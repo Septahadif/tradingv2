@@ -14,7 +14,7 @@ const TIMEFRAME_CONFIG = {
     ema: { fast: 5, slow: 13 },
     rsi: { overbought: 65, oversold: 35 },
     volume: { spike: 1.5, minConfirm: 1.2 },
-    riskReward: 2.0,
+    
     candle: { 
       minSize: 0.3, 
       pinBarWick: 0.6,
@@ -28,7 +28,7 @@ const TIMEFRAME_CONFIG = {
     ema: { fast: 9, slow: 21 },
     rsi: { overbought: 70, oversold: 30 },
     volume: { spike: 1.8, minConfirm: 1.0 },
-    riskReward: 1.5,
+    
     candle: { 
       minSize: 0.4, 
       pinBarWick: 0.6,
@@ -42,7 +42,7 @@ const TIMEFRAME_CONFIG = {
     ema: { fast: 21, slow: 50 },
     rsi: { overbought: 75, oversold: 25 },
     volume: { spike: 1.5, minConfirm: 0.8 },
-    riskReward: 1.3,
+    
     candle: { 
       minSize: 0.5, 
       pinBarWick: 0.6,
@@ -329,44 +329,6 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 }
 
 // Enhanced Risk/Reward Calculation
-function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
-  try {
-  if (!ohlc || !keyLevels || !prevCandles) return 0;
-  
-  const cfg = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-  const atr = Math.max(calculateATR(prevCandles) || (ohlc.high - ohlc.low), 0.0001);
-  const entry = ohlc.close;
-
-  // Jika harga di luar range S1-R1, hitung RR berdasarkan ATR
-  if (entry <= keyLevels.s1 || entry >= keyLevels.r1) {
-    const risk = atr * cfg.atrMultiplier;
-    const reward = risk * cfg.riskReward;
-    return reward / risk; // Ini akan selalu mengembalikan cfg.riskReward
-  }
-
-    let sl, tp, risk, reward;
-
-    if (entry < mid) {
-      sl = Math.min(keyLevels.s1 - (atr * 0.5), ohlc.low - (atr * 0.3));
-      tp = keyLevels.r1 + (atr * cfg.atrMultiplier);
-      risk = Math.max(entry - sl, 0.0001); // pastikan tidak 0
-      reward = Math.max(tp - entry, 0.0001);
-    } else {
-      sl = Math.max(keyLevels.r1 + (atr * 0.5), ohlc.high + (atr * 0.3));
-      tp = keyLevels.s1 - (atr * cfg.atrMultiplier);
-      risk = Math.max(sl - entry, 0.0001);
-      reward = Math.max(entry - tp, 0.0001);
-    }
-
-    const rr = reward / risk;
-    return rr > 50 ? 50 : rr; // Batasi RR maksimal 50:1
-  } catch (e) {
-    debugLog("RR calculation error:", e);
-    return 0;
-  }
-}
-
-
 
 
 // Robust AI Response Parsing
@@ -422,7 +384,6 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
     
     const config = TIMEFRAME_CONFIG[tf];
     const priceAction = detectPriceAction(ohlc, prevCandles, keyLevels, tf);
-    const riskRewardRatio = calculateRiskReward(ohlc, keyLevels, tf, prevCandles);
     const dynamicStop = calculateDynamicStop(ohlc, prevCandles, tf);
     const session = getActiveSession();
 
@@ -432,26 +393,23 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
     
     const timeframeRules = {
       M5: `M5 TRADING RULES (STRICT):
-1. Volume > ${config.volume.spike}x avg (Current: ${(volume/avgVolume).toFixed(1)}x)
-2. Min RR ${config.riskReward}:1 (Current: ${riskRewardRatio.toFixed(1)}:1)
+1. Must confirm with H1 trend (Current: ${higherTF.h1Trend})
+2. Volume > ${config.volume.spike}x avg (Current: ${(volume/avgVolume).toFixed(1)}x)
 3. ${newsWarning}
 4. Session: ${session}
-5. Must confirm with H1 trend (Current: ${higherTF.h1Trend})
 6. Strong rejection or pin bar preferred`,
 
       H1: `H1 TRADING RULES:
 1. Align with D1 trend (Current: ${higherTF.d1Trend})
-2. Min RR ${config.riskReward}:1
-3. Close confirmation required
-4. Volume > ${config.volume.spike}x avg preferred
-5. ${newsWarning}`,
+2. Close confirmation required
+3. Volume > ${config.volume.spike}x avg preferred
+4. ${newsWarning}`,
 
       D1: `D1 TRADING RULES:
 1. Consider weekly trend
-2. Min RR ${config.riskReward}:1
-3. Volume confirmation required
-4. Major S/R levels preferred
-5. ${newsWarning}`
+2. Volume confirmation required
+3. Major S/R levels preferred
+4. ${newsWarning}`
     };
 
     const technicalContext = `TECHNICAL CONTEXT:
@@ -582,15 +540,7 @@ function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, pri
     }
   }
 
-  // 5. Risk/Reward Filter
-  if (riskRewardRatio < config.riskReward) {
-    return {
-      ...result,
-      signal: "hold",
-      confidence: "low",
-      explanation: `${result.explanation} (Rejected: RR ${riskRewardRatio.toFixed(1)}:1 < required ${config.riskReward}:1)`
-    };
-  }
+  
 
   // 6. Price Action Boost
   if ((result.signal === "buy" && priceAction.isBullishPin) || 
@@ -865,7 +815,6 @@ async function handleRequest(request) {
       requestData.avgVolume,
       requestData.higherTF || {},
       priceAction,
-      riskReward,
       timeframe,
       requestData.marketContext || {},
       requestData.symbol
