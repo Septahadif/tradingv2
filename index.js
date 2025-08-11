@@ -288,36 +288,31 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 // Enhanced Risk/Reward Calculation
 function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
   try {
-    const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-    const atr   = calculateATR(prevCandles) || (ohlc.high - ohlc.low);
+    const cfg   = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
+    const atr   = Math.max(calculateATR(prevCandles), ohlc.high - ohlc.low, 0.5);
 
     const entry = ohlc.close;
 
-    // Decide direction first
-    const bullish = entry > keyLevels.s1;  // above support → look for long
-    const bearish = entry < keyLevels.r1;  // below resistance → look for short
+    // --- long setup (buy dip) ---
+    const slLong   = keyLevels.s1 - atr * 0.5;
+    const tpLong   = keyLevels.r1 + atr * cfg.atrMultiplier;
+    const riskLong = entry - slLong;
+    const rwLong   = riskLong > 0 ? (tpLong - entry) / riskLong : 0;
 
-    let stopLoss, takeProfit;
+    // --- short setup (sell rally) ---
+    const slShort   = keyLevels.r1 + atr * 0.5;
+    const tpShort   = keyLevels.s1 - atr * cfg.atrMultiplier;
+    const riskShort = slShort - entry;
+    const rwShort   = riskShort > 0 ? (entry - tpShort) / riskShort : 0;
 
-    if (bullish) {
-      stopLoss   = keyLevels.s1 - atr * 0.5;        // under support
-      takeProfit = keyLevels.r1 + atr * config.atrMultiplier; // beyond resistance
-    } else if (bearish) {
-      stopLoss   = keyLevels.r1 + atr * 0.5;        // above resistance
-      takeProfit = keyLevels.s1 - atr * config.atrMultiplier; // under support
-    } else {
-      return 0; // neutral zone
-    }
-
-    const risk   = Math.abs(entry - stopLoss);
-    const reward = Math.abs(takeProfit - entry);
-
-    return risk > 0 ? reward / risk : 0;
-  } catch (error) {
-    debugLog("RR calculation error:", error);
+    // ambil setup yang RR-nya valid
+    return Math.max(rwLong, rwShort);
+  } catch (e) {
+    debugLog("RR error:", e);
     return 0;
   }
 }
+
 
 
 // Robust AI Response Parsing
