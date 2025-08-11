@@ -466,7 +466,7 @@ async function callAI(symbol, tf, ohlc, prevCandles, indicators, volume, avgVolu
 }
 
 // Complete Signal Filtering
-function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, priceAction, riskRewardRatio, timeframe, marketContext, symbol, ohlc, keyLevels) {
+function filterSignal(parsedSignal, indicators, volume, avgVolume, higherTF, priceAction, timeframe, marketContext, symbol, ohlc, keyLevels) {
   const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
   const result = { ...parsedSignal };
 
@@ -801,12 +801,7 @@ async function handleRequest(request) {
       requestData.keyLevels,
       timeframe
     );
-    const riskReward = calculateRiskReward(
-  requestData.ohlc, 
-  requestData.keyLevels,
-  timeframe,
-  requestData.prevCandles
-);
+    
     const dynamicStop = calculateDynamicStop(
       requestData.ohlc,
       requestData.prevCandles,
