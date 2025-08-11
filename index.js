@@ -330,6 +330,7 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 
 // Enhanced Risk/Reward Calculation
 function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
+  try {
   if (!ohlc || !keyLevels || !prevCandles) return 0;
   
   const cfg = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
