@@ -289,28 +289,36 @@ function detectPriceAction(ohlc, prevCandles, keyLevels, timeframe = 'M5') {
 function calculateRiskReward(ohlc, keyLevels, timeframe, prevCandles) {
   try {
     const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG.M5;
-    const atr = calculateATR(prevCandles);
-    
+    const atr   = calculateATR(prevCandles) || (ohlc.high - ohlc.low);
+
     const entry = ohlc.close;
+
+    // Decide direction first
+    const bullish = entry > keyLevels.s1;  // above support → look for long
+    const bearish = entry < keyLevels.r1;  // below resistance → look for short
+
     let stopLoss, takeProfit;
 
-    if (ohlc.close < keyLevels.s1) { // Bearish scenario
-      stopLoss = ohlc.high + (atr * 0.5);
-      takeProfit = keyLevels.s1 - (atr * config.atrMultiplier);
-    } else { // Bullish scenario
-      stopLoss = ohlc.low - (atr * 0.5);
-      takeProfit = keyLevels.r1 + (atr * config.atrMultiplier);
+    if (bullish) {
+      stopLoss   = keyLevels.s1 - atr * 0.5;        // under support
+      takeProfit = keyLevels.r1 + atr * config.atrMultiplier; // beyond resistance
+    } else if (bearish) {
+      stopLoss   = keyLevels.r1 + atr * 0.5;        // above resistance
+      takeProfit = keyLevels.s1 - atr * config.atrMultiplier; // under support
+    } else {
+      return 0; // neutral zone
     }
 
-    const risk = Math.abs(entry - stopLoss);
+    const risk   = Math.abs(entry - stopLoss);
     const reward = Math.abs(takeProfit - entry);
-    
-    return risk > 0 ? (reward / risk) : 0;
+
+    return risk > 0 ? reward / risk : 0;
   } catch (error) {
     debugLog("RR calculation error:", error);
     return 0;
   }
 }
+
 
 // Robust AI Response Parsing
 function parseAIResponse(aiText) {
