@@ -13,7 +13,7 @@ const TIMEFRAME_CONFIG = {
   M5: {
     ema: { fast: 5, slow: 13 },
     rsi: { overbought: 65, oversold: 35 },
-    volume: { spike: 2.0, minConfirm: 1.2 },
+    volume: { spike: 1.5, minConfirm: 1.2 },
     riskReward: 2.0,
     candle: { 
       minSize: 0.3, 
