@@ -61,25 +61,25 @@ async function analyzeMarket(symbol, timeframe, ohlc, indicators, volume, avgVol
     - "entry" (harga entry yang disarankan)
     - "stopLoss" (harga stop loss yang disarankan)
     - "takeProfit" (harga take profit yang disarankan)
+    - "riskReward" (hitung risk/reward ratio secara otomatis)
+
+    Hitung risk/reward ratio dengan:
+    1. Risk = |entry - stopLoss|
+    2. Reward = |takeProfit - entry|
+    3. Pastikan minimal 1:1.5
 
     ${priceAction}
     ${indicatorAnalysis}
 
-    Berikan rekomendasi trading berdasarkan:
-    1. EMA9/EMA21 crossover di M5
-    2. Konfirmasi EMA50 dan trend M15
-    3. Stochastic overbought/oversold
-    4. Bollinger Bands untuk volatilitas
-    5. Volume untuk konfirmasi momentum
-
     Contoh response:
     {
       "signal": "buy",
-      "explanation": "EMA9 cross di atas EMA21 dengan harga di atas EMA50 M15, Stochastic oversold, dan volume tinggi",
+      "explanation": "EMA9 cross di atas EMA21 dengan harga di atas EMA50 M15...",
       "confidence": "high",
-      "entry": 3350.50,
-      "stopLoss": 3348.00,
-      "takeProfit": 3355.00
+      "entry": 1.0855,
+      "stopLoss": 1.0840,
+      "takeProfit": 1.0875,
+      "riskReward": 1.67
     }
   `;
 
@@ -106,15 +106,27 @@ async function analyzeMarket(symbol, timeframe, ohlc, indicators, volume, avgVol
   }
 
   const data = await resp.json();
-  return data?.choices?.[0]?.message?.content || "";
+  const responseText = data?.choices?.[0]?.message?.content || "";
+  
+  try {
+    const signalData = JSON.parse(responseText);
+    if (signalData.entry) signalData.entry = parseFloat(signalData.entry.toFixed(4));
+    if (signalData.stopLoss) signalData.stopLoss = parseFloat(signalData.stopLoss.toFixed(4));
+    if (signalData.takeProfit) signalData.takeProfit = parseFloat(signalData.takeProfit.toFixed(4));
+    return JSON.stringify(signalData);
+  } catch (e) {
+    return responseText;
+  }
 }
 
 async function sendTelegramAlert(signalData, marketData) {
   const { symbol, timeframe } = marketData;
-  const { signal, explanation, confidence, entry, stopLoss, takeProfit } = signalData;
+  const { signal, explanation, confidence, entry, stopLoss, takeProfit, riskReward } = signalData;
 
   let rrRatio = "";
-  if (entry && stopLoss && takeProfit) {
+  if (riskReward) {
+    rrRatio = `Risk/Reward: 1:${riskReward.toFixed(2)}\n`;
+  } else if (entry && stopLoss && takeProfit) {
     const risk = Math.abs(entry - stopLoss);
     const reward = Math.abs(takeProfit - entry);
     rrRatio = `Risk/Reward: 1:${(reward / risk).toFixed(2)}\n`;
@@ -125,9 +137,9 @@ async function sendTelegramAlert(signalData, marketData) {
   let message = `${emoji} (${confidence} confidence)\n`;
   
   if (signal !== "hold") {
-    message += `Entry: ${entry !== null ? entry.toFixed(2) : "N/A"}\n`;
-    message += `Stop Loss: ${stopLoss !== null ? stopLoss.toFixed(2) : "N/A"}\n`;
-    message += `Take Profit: ${takeProfit !== null ? takeProfit.toFixed(2) : "N/A"}\n`;
+    message += `Entry: ${entry !== null ? entry.toFixed(4) : "N/A"}\n`;
+    message += `Stop Loss: ${stopLoss !== null ? stopLoss.toFixed(4) : "N/A"}\n`;
+    message += `Take Profit: ${takeProfit !== null ? takeProfit.toFixed(4) : "N/A"}\n`;
     message += `${rrRatio}\n`;
   }
   
