@@ -43,7 +43,7 @@ async function analyzeMarket(symbol, timeframe, ohlc, indicators, volume, avgVol
   `;
 
   const indicatorAnalysis = `
-    Indikator saat ini:
+    analisis indikator ini:
     - EMA9 (M5): ${indicators.ema9} (${indicators.ema9 > ohlc.close ? 'di atas' : 'di bawah'} harga)
     - EMA21 (M5): ${indicators.ema21}
     - EMA50 (M15): ${indicators.ema50}
@@ -54,7 +54,7 @@ async function analyzeMarket(symbol, timeframe, ohlc, indicators, volume, avgVol
   `;
 
   const prompt = `
-    Saya trading ${symbol} di timeframe ${timeframe}. Berikan analisis dalam format JSON dengan field:
+    Saya trading ${symbol} di timeframe ${timeframe}. Berikan analisis berdasarkan indikator + ohlc dalam format JSON dengan field:
     - "signal" (buy/sell/hold)
     - "explanation" (penjelasan dalam bahasa natural)
     - "confidence" (high/medium/low)
