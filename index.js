@@ -4,7 +4,7 @@ const MODEL = "gpt-4o-mini";
 // Hardcoded credentials
 const TELEGRAM_BOT_TOKEN = "7484227045:AAF1CmbY2cOW_7C_NObYCiOGNUNK3Sqehlg";
 const TELEGRAM_CHAT_ID = "5026145251";
-const PRE_SHARED_TOKEN = "supersecret123"; // Replace with your actual token
+const PRE_SHARED_TOKEN = "supersecret123";
 
 // Multiple FREEV36 API keys for rotation
 const FREEV36_API_KEYS = [
@@ -17,10 +17,11 @@ let currentApiKeyIndex = 0;
 let lastKeyRotation = Date.now();
 
 function getCurrentApiKey() {
+  if (FREEV36_API_KEYS.length === 0) throw new Error("No API keys available");
+  
   const now = Date.now();
   const sixHours = 6 * 60 * 60 * 1000;
   
-  // Rotate key every 6 hours
   if (now - lastKeyRotation >= sixHours) {
     currentApiKeyIndex = (currentApiKeyIndex + 1) % FREEV36_API_KEYS.length;
     lastKeyRotation = now;
@@ -30,8 +31,11 @@ function getCurrentApiKey() {
   return FREEV36_API_KEYS[currentApiKeyIndex];
 }
 
-// Enhanced market analysis with EMA9/EMA21 (M5) + EMA50 (M15) + Stochastic + BB + Volume
 async function analyzeMarket(symbol, timeframe, ohlc, indicators, volume, avgVolume, keyLevels, m15Trend) {
+  if (!ohlc || typeof ohlc.close !== 'number') {
+    throw new Error("Invalid OHLC data");
+  }
+
   const priceAction = `
     Harga saat ini: ${ohlc.close}
     Open: ${ohlc.open}, High: ${ohlc.high}, Low: ${ohlc.low}
@@ -105,7 +109,6 @@ async function analyzeMarket(symbol, timeframe, ohlc, indicators, volume, avgVol
   return data?.choices?.[0]?.message?.content || "";
 }
 
-// Telegram notification (unchanged)
 async function sendTelegramAlert(signalData, marketData) {
   const { symbol, timeframe } = marketData;
   const { signal, explanation, confidence, entry, stopLoss, takeProfit } = signalData;
@@ -122,9 +125,9 @@ async function sendTelegramAlert(signalData, marketData) {
   let message = `${emoji} (${confidence} confidence)\n`;
   
   if (signal !== "hold") {
-    message += `Entry: ${entry?.toFixed(2) || "N/A"}\n`;
-    message += `Stop Loss: ${stopLoss?.toFixed(2) || "N/A"}\n`;
-    message += `Take Profit: ${takeProfit?.toFixed(2) || "N/A"}\n`;
+    message += `Entry: ${entry !== null ? entry.toFixed(2) : "N/A"}\n`;
+    message += `Stop Loss: ${stopLoss !== null ? stopLoss.toFixed(2) : "N/A"}\n`;
+    message += `Take Profit: ${takeProfit !== null ? takeProfit.toFixed(2) : "N/A"}\n`;
     message += `${rrRatio}\n`;
   }
   
@@ -153,7 +156,6 @@ async function sendTelegramAlert(signalData, marketData) {
   }
 }
 
-// Main request handler (unchanged)
 addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request));
 });
@@ -192,7 +194,7 @@ async function handleRequest(request) {
       volume: inputData.volume || 0,
       avgVolume: inputData.avgVolume || inputData.volume || 1,
       keyLevels: inputData.keyLevels || { s1: 0, r1: 0 },
-      higherTF: inputData.higherTF || { m15Trend: "neutral" } // Updated to M15 trend
+      higherTF: inputData.higherTF || { m15Trend: "neutral" }
     };
 
     const aiResponse = await analyzeMarket(
@@ -203,7 +205,7 @@ async function handleRequest(request) {
       marketData.volume,
       marketData.avgVolume,
       marketData.keyLevels,
-      marketData.higherTF.m15Trend // Updated to M15 trend
+      marketData.higherTF.m15Trend
     );
 
     let signalData;
@@ -220,6 +222,7 @@ async function handleRequest(request) {
       signalData.confidence = signalData.confidence || "medium";
       
     } catch (e) {
+      console.error("Failed to parse AI response:", e, "Raw response:", aiResponse);
       return new Response(JSON.stringify({ 
         error: "Failed to parse AI response",
         ai_response: aiResponse
@@ -232,7 +235,10 @@ async function handleRequest(request) {
     await sendTelegramAlert(signalData, marketData);
 
     return new Response(JSON.stringify(signalData), {
-      headers: { "Content-Type": "application/json" }
+      headers: { 
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      }
     });
 
   } catch (error) {
