@@ -38,7 +38,6 @@ function getCurrentApiKey() {
 
 // Enhanced data validation
 function validateData(data, tf) {
-function validateData(data, tf) {
   if (!data?.ohlc ||
       typeof data.ohlc.close !== 'number' ||
       typeof data.ohlc.open !== 'number' ||
