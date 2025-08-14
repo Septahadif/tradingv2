@@ -56,12 +56,12 @@ function validateData(data, tf) {
     ema21: Number(data.indicators?.ema21) || 0,
     // EMAs untuk H1
     ema50: Number(data.indicators?.ema50) || 0,
-    rsi: Math.min(Math.max(Number(data.indicators?.rsi) || 50, 100),
+    rsi: Math.min(Math.max(Number(data.indicators?.rsi) || 50, 0), 100),
     macd: {
       line: Number(data.indicators?.macd?.line) || 0,
       signal: Number(data.indicators?.macd?.signal) || 0
     },
-    adx: Math.min(Math.max(Number(data.indicators?.adx) || 0, 100),
+    adx: Math.min(Math.max(Number(data.indicators?.adx) || 0, 0), 100),
     volume: Math.max(Number(data.volume) || 0, 0)
   };
 }
