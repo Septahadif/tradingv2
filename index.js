@@ -59,11 +59,14 @@ function validateData(data, tf) {
     };
 }
 
-// Secure Markdown formatting
+// Enhanced Markdown formatting
 function escapeMarkdown(text) {
-    return String(text || "")
+    if (!text) return "";
+    return String(text)
         .replace(/\n/g, ' ')
-        .replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1');
+        .replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1')
+        .replace(/\//g, '\\/')
+        .substring(0, 4000); // Batasi panjang teks untuk Telegram
 }
 
 async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
@@ -148,7 +151,10 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
             const parsed = JSON.parse(rawResponse);
             if (!parsed.signal) throw new Error("Signal tidak ditemukan");
             
-            // Normalisasi output
+            // Enhanced normalization
+            const normalizedSignal = String(parsed.signal).toLowerCase().trim();
+            const normalizedConfidence = String(parsed.confidence).toLowerCase().trim();
+            
             const signalMap = {
                 'beli': 'buy',
                 'jual': 'sell',
@@ -162,9 +168,9 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
             };
 
             return {
-                signal: signalMap[parsed.signal.toLowerCase()] || 'wait',
+                signal: signalMap[normalizedSignal] || 'wait',
                 reason: parsed.reason || "Tidak ada analisis yang diberikan",
-                confidence: confidenceMap[parsed.confidence.toLowerCase()] || 'medium',
+                confidence: confidenceMap[normalizedConfidence] || 'medium',
                 entry: parseFloat(parsed.levels?.entry) || null,
                 stopLoss: parseFloat(parsed.levels?.stop) || null,
                 takeProfit: parseFloat(parsed.levels?.target) || null,
@@ -196,21 +202,27 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
 }
 
 async function sendTelegramAlert(signalData, marketData) {
+    console.log("[Telegram] Memulai proses pengiriman notifikasi", {
+        signalData: JSON.stringify(signalData),
+        marketData: JSON.stringify(marketData)
+    });
+
     try {
         const timeString = new Date().toLocaleString('id-ID', { 
             timeZone: 'Asia/Jakarta',
             hour12: false 
         });
 
-        // Format pesan rata kiri dengan emoji dan teks jelas
+        // Enhanced signal mapping
         const signalText = {
             'buy': '🟢 BELI',
             'sell': '🔴 JUAL', 
             'wait': '🟡 TUNGGU'
-        }[signalData.signal] || '🟡 TUNGGU';
+        }[signalData.signal.toLowerCase()] || '🟡 TUNGGU';
 
+        // Format message dengan escape yang lebih ketat
         const message = `
-${signalText} *${marketData.symbol.toUpperCase()}* \\[${signalData.confidence.toUpperCase()}\\]
+${signalText} *${escapeMarkdown(marketData.symbol.toUpperCase())}* \\[${escapeMarkdown(signalData.confidence.toUpperCase())}\\]
 
 *Entry*: \`${signalData.entry?.toFixed(4) || "N/A"}\`
 *Stop Loss*: \`${signalData.stopLoss?.toFixed(4) || "N/A"}\`
@@ -228,8 +240,10 @@ ${escapeMarkdown(signalData.observations.volume)}
 *Analisis*:
 ${escapeMarkdown(signalData.reason)}
 
-_${timeString} WIB_
-        `;
+_${escapeMarkdown(timeString)} WIB_
+        `.trim();
+
+        console.log("[Telegram] Pesan yang akan dikirim:", message);
 
         const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: "POST",
@@ -242,11 +256,22 @@ _${timeString} WIB_
             })
         });
 
+        const responseData = await resp.json();
+        console.log("[Telegram] Response:", resp.status, responseData);
+
         if (!resp.ok) {
-            throw new Error(`Error Telegram ${resp.status}: ${await resp.text()}`);
+            throw new Error(`Error Telegram ${resp.status}: ${JSON.stringify(responseData)}`);
         }
+
+        return true;
     } catch (e) {
-        console.error("Error Telegram:", e);
+        console.error("[Telegram] Error detail:", {
+            message: e.message,
+            stack: e.stack,
+            signalData,
+            marketData
+        });
+        return false;
     }
 }
 
@@ -307,15 +332,16 @@ async function handleRequest(request) {
             inputData.h1
         );
 
-        // Send notification
-        await sendTelegramAlert(result, {
+        // Send notification with enhanced logging
+        const notificationSent = await sendTelegramAlert(result, {
             symbol: inputData.symbol,
             timeframe: "M5+M15+H1"
         });
 
-        // Return response
+        // Return response with notification status
         return new Response(JSON.stringify({
             ...result,
+            notification_sent: notificationSent,
             request_id: requestId,
             processing_time_ms: Date.now() - startTime
         }), {
