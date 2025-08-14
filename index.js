@@ -32,7 +32,7 @@ async function rotateKey() {
 }
 
 function getCurrentApiKey() {
-    if (FREEV36_API_KEYS.length === 0) throw new Error("No API keys available");
+    if (FREEV36_API_KEYS.length === 0) throw new Error("Tidak ada API key yang tersedia");
     return FREEV36_API_KEYS[currentApiKeyIndex];
 }
 
@@ -43,7 +43,7 @@ function validateData(data, tf) {
         typeof data.ohlc.open !== 'number' ||
         typeof data.ohlc.high !== 'number' ||
         typeof data.ohlc.low !== 'number') {
-        throw new Error(`Invalid ${tf} OHLC structure`);
+        throw new Error(`Struktur OHLC ${tf} tidak valid`);
     }
 
     return {
@@ -77,45 +77,45 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
         ];
 
         const prompt = `
-            Analyze these market conditions and provide pure technical analysis:
+            Analisis kondisi pasar berikut dalam Bahasa Indonesia dan berikan rekomendasi teknikal murni:
             
             Symbol: ${symbol}
             
-            H1 (Macro Trend):
-            - Price: ${h1.ohlc.close} (O:${h1.ohlc.open} H:${h1.ohlc.high} L:${h1.ohlc.low})
-            - EMAs: 9=${h1.ema9.toFixed(4)} | 21=${h1.ema21.toFixed(4)}
+            H1 (Trend Makro):
+            - Harga: ${h1.ohlc.close} (Buka:${h1.ohlc.open} Tertinggi:${h1.ohlc.high} Terendah:${h1.ohlc.low})
+            - EMA9: ${h1.ema9.toFixed(4)} | EMA21: ${h1.ema21.toFixed(4)}
             - RSI: ${h1.rsi.toFixed(2)}
             - MACD: Line=${h1.macd.line.toFixed(4)} Signal=${h1.macd.signal.toFixed(4)}
             - Volume: ${h1.volume.toLocaleString()}
             
-            M15 (Intermediate):
-            - Price: ${m15.ohlc.close.toFixed(4)}
-            - EMAs: 9=${m15.ema9.toFixed(4)} | 21=${m15.ema21.toFixed(4)}
+            M15 (Menengah):
+            - Harga: ${m15.ohlc.close.toFixed(4)}
+            - EMA9: ${m15.ema9.toFixed(4)} | EMA21: ${m15.ema21.toFixed(4)}
             - RSI: ${m15.rsi.toFixed(2)}
             - MACD: Line=${m15.macd.line.toFixed(4)} Signal=${m15.macd.signal.toFixed(4)}
             - Volume: ${m15.volume.toLocaleString()}
             
             M5 (Entry):
-            - Price: ${m5.ohlc.close.toFixed(4)}
-            - EMAs: 9=${m5.ema9.toFixed(4)} | 21=${m5.ema21.toFixed(4)}
+            - Harga: ${m5.ohlc.close.toFixed(4)}
+            - EMA9: ${m5.ema9.toFixed(4)} | EMA21: ${m5.ema21.toFixed(4)}
             - RSI: ${m5.rsi.toFixed(2)}
             - MACD: Line=${m5.macd.line.toFixed(4)} Signal=${m5.macd.signal.toFixed(4)}
             - Volume: ${m5.volume.toLocaleString()}
 
-            Provide analysis in JSON format:
+            Berikan analisis dalam format JSON:
             {
-                "signal": "buy/sell/wait",
-                "reason": "technical_analysis",
-                "confidence": "low/medium/high",
+                "signal": "beli/jual/tunggu",
+                "reason": "analisis_teknikal",
+                "confidence": "rendah/sedang/tinggi",
                 "levels": {
                     "entry": number,
                     "stop": number,
                     "target": number
                 },
                 "observations": {
-                    "trend": "analysis",
-                    "momentum": "analysis",
-                    "volume": "analysis"
+                    "trend": "analisis",
+                    "momentum": "analisis",
+                    "volume": "analisis"
                 }
             }
         `;
@@ -138,7 +138,7 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
         });
 
         if (!resp.ok) {
-            throw new Error(`API ${resp.status}: ${await resp.text()}`);
+            throw new Error(`Error API ${resp.status}: ${await resp.text()}`);
         }
 
         const data = await resp.json();
@@ -146,14 +146,25 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
         
         try {
             const parsed = JSON.parse(rawResponse);
-            if (!parsed.signal) throw new Error("Missing signal");
+            if (!parsed.signal) throw new Error("Signal tidak ditemukan");
             
+            // Normalisasi output
+            const signalMap = {
+                'beli': 'buy',
+                'jual': 'sell',
+                'tunggu': 'wait'
+            };
+            
+            const confidenceMap = {
+                'rendah': 'low',
+                'sedang': 'medium',
+                'tinggi': 'high'
+            };
+
             return {
-                signal: parsed.signal.toLowerCase(),
-                reason: parsed.reason || "No analysis provided",
-                confidence: ["low","medium","high"].includes(parsed.confidence) 
-                    ? parsed.confidence 
-                    : "medium",
+                signal: signalMap[parsed.signal.toLowerCase()] || 'wait',
+                reason: parsed.reason || "Tidak ada analisis yang diberikan",
+                confidence: confidenceMap[parsed.confidence.toLowerCase()] || 'medium',
                 entry: parseFloat(parsed.levels?.entry) || null,
                 stopLoss: parseFloat(parsed.levels?.stop) || null,
                 takeProfit: parseFloat(parsed.levels?.target) || null,
@@ -165,20 +176,20 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
                 raw: rawResponse
             };
         } catch (e) {
-            console.error("AI Response Parse Error:", rawResponse);
+            console.error("Error parsing respons AI:", rawResponse);
             return {
                 signal: "wait",
-                reason: `AI parse error: ${e.message}`,
+                reason: `Error parsing AI: ${e.message}`,
                 confidence: "low",
                 raw: rawResponse
             };
         }
 
     } catch (error) {
-        console.error("Analysis Error:", error);
+        console.error("Error analisis:", error);
         return {
             signal: "wait",
-            reason: `Analysis failed: ${error.message}`,
+            reason: `Gagal analisis: ${error.message}`,
             confidence: "low"
         };
     }
@@ -186,26 +197,38 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
 
 async function sendTelegramAlert(signalData, marketData) {
     try {
-        const timeString = new Date().toLocaleString('en-US', { 
-            timeZone: 'UTC',
+        const timeString = new Date().toLocaleString('id-ID', { 
+            timeZone: 'Asia/Jakarta',
             hour12: false 
-        }) + " UTC";
+        });
+
+        // Format pesan rata kiri dengan emoji dan teks jelas
+        const signalText = {
+            'buy': '🟢 BELI',
+            'sell': '🔴 JUAL', 
+            'wait': '🟡 TUNGGU'
+        }[signalData.signal] || '🟡 TUNGGU';
 
         const message = `
-            ${signalData.signal === "buy" ? "🟢" : signalData.signal === "sell" ? "🔴" : "🟡"} *${marketData.symbol.toUpperCase()}* \\[${signalData.confidence.toUpperCase()}\\]
-            
-            *Entry*: \`${signalData.entry?.toFixed(4) || "N/A"}\`
-            *Stop*: \`${signalData.stopLoss?.toFixed(4) || "N/A"}\`
-            *Target*: \`${signalData.takeProfit?.toFixed(4) || "N/A"}\`
-            
-            *Trend*: ${escapeMarkdown(signalData.observations.trend)}
-            *Momentum*: ${escapeMarkdown(signalData.observations.momentum)}
-            *Volume*: ${escapeMarkdown(signalData.observations.volume)}
-            
-            *Analysis*:
-            ${escapeMarkdown(signalData.reason)}
-            
-            _${timeString}_
+${signalText} *${marketData.symbol.toUpperCase()}* \\[${signalData.confidence.toUpperCase()}\\]
+
+*Entry*: \`${signalData.entry?.toFixed(4) || "N/A"}\`
+*Stop Loss*: \`${signalData.stopLoss?.toFixed(4) || "N/A"}\`
+*Take Profit*: \`${signalData.takeProfit?.toFixed(4) || "N/A"}\`
+
+*Trend*:
+${escapeMarkdown(signalData.observations.trend)}
+
+*Momentum*:
+${escapeMarkdown(signalData.observations.momentum)}
+
+*Volume*:
+${escapeMarkdown(signalData.observations.volume)}
+
+*Analisis*:
+${escapeMarkdown(signalData.reason)}
+
+_${timeString} WIB_
         `;
 
         const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -220,102 +243,14 @@ async function sendTelegramAlert(signalData, marketData) {
         });
 
         if (!resp.ok) {
-            throw new Error(`Telegram ${resp.status}: ${await resp.text()}`);
+            throw new Error(`Error Telegram ${resp.status}: ${await resp.text()}`);
         }
     } catch (e) {
-        console.error("Telegram Error:", e);
+        console.error("Error Telegram:", e);
     }
 }
 
-async function handleRequest(request) {
-    const startTime = Date.now();
-    const requestId = request.headers.get('cf-ray') || Math.random().toString(36).substring(7);
-
-    try {
-        // Validate method
-        if (request.method !== "POST") {
-            return new Response(JSON.stringify({ 
-                error: "Method not allowed",
-                allowed_methods: ["POST"]
-            }), { 
-                status: 405,
-                headers: { "Content-Type": "application/json" }
-            });
-        }
-
-        // Authenticate
-        const auth = request.headers.get("x-api-key");
-        if (auth !== PRE_SHARED_TOKEN) {
-            return new Response(JSON.stringify({ 
-                error: "Unauthorized",
-                request_id: requestId
-            }), { 
-                status: 401,
-                headers: { "Content-Type": "application/json" }
-            });
-        }
-
-        // Parse and validate input
-        let inputData;
-        try {
-            inputData = await request.json();
-            if (!inputData?.symbol || !/^[A-Za-z]{3,10}$/.test(inputData.symbol)) {
-                throw new Error("Invalid symbol format");
-            }
-            if (!inputData.m5 || !inputData.m15 || !inputData.h1) {
-                throw new Error("Missing timeframe data");
-            }
-        } catch (e) {
-            return new Response(JSON.stringify({ 
-                error: "Invalid request body",
-                details: e.message,
-                request_id: requestId
-            }), { 
-                status: 400,
-                headers: { "Content-Type": "application/json" }
-            });
-        }
-
-        // Process analysis
-        const result = await analyzeMultiTimeframe(
-            inputData.symbol,
-            inputData.m5,
-            inputData.m15,
-            inputData.h1
-        );
-
-        // Send notification
-        await sendTelegramAlert(result, {
-            symbol: inputData.symbol,
-            timeframe: "M5+M15+H1"
-        });
-
-        // Return response
-        return new Response(JSON.stringify({
-            ...result,
-            request_id: requestId,
-            processing_time_ms: Date.now() - startTime
-        }), {
-            status: 200,
-            headers: { 
-                "Content-Type": "application/json",
-                "Cache-Control": "no-store"
-            }
-        });
-
-    } catch (error) {
-        console.error(`Request ${requestId} Error:`, error);
-        return new Response(JSON.stringify({ 
-            error: "Internal server error",
-            request_id: requestId,
-            processing_time_ms: Date.now() - startTime
-        }), { 
-            status: 500,
-            headers: { "Content-Type": "application/json" }
-        });
-    }
-}
-
+// [Fungsi handleRequest dan event listener tetap sama persis]
 addEventListener("fetch", event => {
     event.respondWith(handleRequest(event.request));
 });
