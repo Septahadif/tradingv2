@@ -250,7 +250,95 @@ _${timeString} WIB_
     }
 }
 
-// [Fungsi handleRequest dan event listener tetap sama persis]
+async function handleRequest(request) {
+    const startTime = Date.now();
+    const requestId = request.headers.get('cf-ray') || Math.random().toString(36).substring(7);
+
+    try {
+        // Validate method
+        if (request.method !== "POST") {
+            return new Response(JSON.stringify({ 
+                error: "Method not allowed",
+                allowed_methods: ["POST"]
+            }), { 
+                status: 405,
+                headers: { "Content-Type": "application/json" }
+            });
+        }
+
+        // Authenticate
+        const auth = request.headers.get("x-api-key");
+        if (auth !== PRE_SHARED_TOKEN) {
+            return new Response(JSON.stringify({ 
+                error: "Unauthorized",
+                request_id: requestId
+            }), { 
+                status: 401,
+                headers: { "Content-Type": "application/json" }
+            });
+        }
+
+        // Parse and validate input
+        let inputData;
+        try {
+            inputData = await request.json();
+            if (!inputData?.symbol || !/^[A-Za-z]{3,10}$/.test(inputData.symbol)) {
+                throw new Error("Invalid symbol format");
+            }
+            if (!inputData.m5 || !inputData.m15 || !inputData.h1) {
+                throw new Error("Missing timeframe data");
+            }
+        } catch (e) {
+            return new Response(JSON.stringify({ 
+                error: "Invalid request body",
+                details: e.message,
+                request_id: requestId
+            }), { 
+                status: 400,
+                headers: { "Content-Type": "application/json" }
+            });
+        }
+
+        // Process analysis
+        const result = await analyzeMultiTimeframe(
+            inputData.symbol,
+            inputData.m5,
+            inputData.m15,
+            inputData.h1
+        );
+
+        // Send notification
+        await sendTelegramAlert(result, {
+            symbol: inputData.symbol,
+            timeframe: "M5+M15+H1"
+        });
+
+        // Return response
+        return new Response(JSON.stringify({
+            ...result,
+            request_id: requestId,
+            processing_time_ms: Date.now() - startTime
+        }), {
+            status: 200,
+            headers: { 
+                "Content-Type": "application/json",
+                "Cache-Control": "no-store"
+            }
+        });
+
+    } catch (error) {
+        console.error(`Request ${requestId} Error:`, error);
+        return new Response(JSON.stringify({ 
+            error: "Internal server error",
+            request_id: requestId,
+            processing_time_ms: Date.now() - startTime
+        }), { 
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+        });
+    }
+}
+
 addEventListener("fetch", event => {
     event.respondWith(handleRequest(event.request));
 });
