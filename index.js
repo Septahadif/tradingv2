@@ -87,32 +87,35 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
         ];
 
         const prompt = `
-    Analisis kondisi pasar berikut dalam Bahasa Indonesia dan berikan rekomendasi teknikal murni:
+    Analisis kondisi pasar berikut dan berikan rekomendasi terbaik:
+    peraturan
+    - jika adx rendah rekomendasikan tunggu
+    - analisis semua indikator di semua timeframe untuk menentukan arah
     
     Symbol: ${symbol}
     
     H1 (Trend Makro):
     - Harga: ${h1.ohlc.close} (Buka:${h1.ohlc.open} Tertinggi:${h1.ohlc.high} Terendah:${h1.ohlc.low})
+    - ADX(21): ${h1.adx.toFixed(2)}
     - EMA21: ${h1.ema21.toFixed(4)} | EMA50: ${h1.ema50.toFixed(4)}
     - RSI(21): ${h1.rsi.toFixed(2)}
     - MACD(21,50,14): Line=${h1.macd.line.toFixed(4)} Signal=${h1.macd.signal.toFixed(4)}
-    - ADX(21): ${h1.adx.toFixed(2)}
     - Volume: ${h1.volume.toLocaleString()}
     
     M15 (Menengah):
     - Harga: ${m15.ohlc.close.toFixed(4)}
+    - ADX(14): ${m15.adx.toFixed(2)}
     - EMA12: ${m15.ema12.toFixed(4)} | EMA21: ${m15.ema21.toFixed(4)}
     - RSI(14): ${m15.rsi.toFixed(2)}
     - MACD(12,26,9): Line=${m15.macd.line.toFixed(4)} Signal=${m15.macd.signal.toFixed(4)}
-    - ADX(14): ${m15.adx.toFixed(2)}
     - Volume: ${m15.volume.toLocaleString()}
     
     M5 (Entry):
     - Harga: ${m5.ohlc.close.toFixed(4)}
+    - ADX(10): ${m5.adx.toFixed(2)}
     - EMA5: ${m5.ema5.toFixed(4)} | EMA9: ${m5.ema9.toFixed(4)}
     - RSI(9): ${m5.rsi.toFixed(2)}
     - MACD(8,17,9): Line=${m5.macd.line.toFixed(4)} Signal=${m5.macd.signal.toFixed(4)}
-    - ADX(10): ${m5.adx.toFixed(2)}
     - Volume: ${m5.volume.toLocaleString()}
 
     Berikan analisis dalam format JSON:
