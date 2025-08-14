@@ -38,33 +38,32 @@ function getCurrentApiKey() {
 
 // Enhanced data validation
 function validateData(data, tf) {
-    if (!data?.ohlc || 
-        typeof data.ohlc.close !== 'number' ||
-        typeof data.ohlc.open !== 'number' ||
-        typeof data.ohlc.high !== 'number' ||
-        typeof data.ohlc.low !== 'number') {
-        throw new Error(`Struktur OHLC ${tf} tidak valid`);
-    }
+  if (!data?.ohlc ||
+      typeof data.ohlc.close !== 'number' ||
+      typeof data.ohlc.open !== 'number' ||
+      typeof data.ohlc.high !== 'number' ||
+      typeof data.ohlc.low !== 'number') {
+    throw new Error(`Struktur OHLC ${tf} tidak valid`);
+  }
 
-    return {
-        ohlc: data.ohlc,
-        // EMAs untuk M5
-        ema5: Number(data.indicators?.ema5) || 0,
-        ema9: Number(data.indicators?.ema9) || 0,
-        // EMAs untuk M15
-        ema12: Number(data.indicators?.ema12) || 0,
-        ema21: Number(data.indicators?.ema21) || 0,
-        // EMAs untuk H1
-        ema21: Number(data.indicators?.ema21) || 0,  // Ditambahkan untuk H1
-        ema50: Number(data.indicators?.ema50) || 0,
-        rsi: Math.min(Math.max(Number(data.indicators?.rsi) || 50, 0), 100),
-        macd: {
-            line: Number(data.indicators?.macd?.line) || 0,
-            signal: Number(data.indicators?.macd?.signal) || 0
-        },
-        adx: Math.min(Math.max(Number(data.indicators?.adx) || 0, 100), // Fixed missing parenthesis
-        volume: Math.max(Number(data.volume) || 0, 0)
-    };
+  return {
+    ohlc: data.ohlc,
+    // EMAs untuk M5
+    ema5: Number(data.indicators?.ema5) || 0,
+    ema9: Number(data.indicators?.ema9) || 0,
+    // EMAs untuk M15
+    ema12: Number(data.indicators?.ema12) || 0,
+    ema21: Number(data.indicators?.ema21) || 0,
+    // EMAs untuk H1
+    ema50: Number(data.indicators?.ema50) || 0,
+    rsi: Math.min(Math.max(Number(data.indicators?.rsi) || 50, 0, 100),
+    macd: {
+      line: Number(data.indicators?.macd?.line) || 0,
+      signal: Number(data.indicators?.macd?.signal) || 0
+    },
+    adx: Math.min(Math.max(Number(data.indicators?.adx) || 0, 100),
+    volume: Math.max(Number(data.volume) || 0, 0)
+  };
 }
 
 // Enhanced Markdown formatting
