@@ -88,9 +88,6 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
 
         const prompt = `
     Analisis kondisi pasar berikut dan berikan rekomendasi terbaik:
-    peraturan
-    - jangan ragu untuk menentukan tunggu/jual/beli
-    - aku akan melakukan scalping
     
     Symbol: ${symbol}
     
