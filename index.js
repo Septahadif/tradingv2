@@ -89,8 +89,8 @@ async function analyzeMultiTimeframe(symbol, m5Data, m15Data, h1Data) {
         const prompt = `
     Analisis kondisi pasar berikut dan berikan rekomendasi terbaik:
     peraturan
-    - jika adx rendah rekomendasikan tunggu
-    - analisis semua indikator di semua timeframe untuk menentukan arah
+    - jangan ragu untuk menentukan tunggu/jual/beli
+    - aku akan melakukan scalping
     
     Symbol: ${symbol}
     
